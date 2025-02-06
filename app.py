@@ -1,3 +1,12 @@
+import os
+
+# Instalar openpyxl si no está instalado
+try:
+    import openpyxl
+except ImportError:
+    os.system("pip install openpyxl")
+    import openpyxl
+
 import streamlit as st
 import pandas as pd
 import numpy as np
