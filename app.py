@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import io
 
 # Configuración de la App
 st.title("Procesador de Datos de Caja")
@@ -9,6 +8,9 @@ st.write("Sube un archivo de Excel para iniciar el procesamiento de datos.")
 
 # Subir archivo Excel
 archivo_subido = st.file_uploader("Sube tu archivo Excel", type=["xlsx"])
+
+if archivo_subido:
+    df = pd.read_excel(archivo_subido, engine='openpyxl')  # ⚠️ Aquí está la corrección
 
 if archivo_subido:
     df = pd.read_excel(archivo_subido)
