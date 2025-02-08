@@ -18,7 +18,7 @@ def cargar_datos(uploaded_file):
 def generar_reporte_por_cajero(df, cajero, fecha_inicio, fecha_fin, carpeta_reportes, observacion_final):
     """Genera un reporte individual para un cajero en un rango de fechas con formato mejorado."""
     df_filtrado = df[(df["CAJERO"] == cajero) & (df["FECHA"] >= fecha_inicio) & (df["FECHA"] <= fecha_fin)]
-    columnas_reporte = ["FECHA", "FALTANTE", "DATOS_PLANILLA", "OBSERVACIONES", "CANT", "NC", "CANTIA_NUL", "MONTO_ANUL"]
+    columnas_reporte = ["FECHA", "FALTANTE", "SOBRANTE, "CANT_TK", "DATOS_PLANILLA", "OBSERVACIONES", "CANT", "NC", "CANTIA_NUL", "MONTO_ANUL"]
     
     if df_filtrado.empty:
         df_reporte = pd.DataFrame(columns=columnas_reporte)
