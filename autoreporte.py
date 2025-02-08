@@ -29,7 +29,7 @@ def generar_reporte_por_cajero(df, cajero, fecha_inicio, fecha_fin, carpeta_repo
     df = df.rename(columns=renombrar_columnas)
     
     df_filtrado = df[(df["CAJERO"] == cajero) & (df["FECHA"] >= fecha_inicio) & (df["FECHA"] <= fecha_fin)]
-    columnas_reporte = ["FECHA", "FALTANTE", "SOBRANTE", "CANT_TK", "DATOS PLANI", "OBSERVACIONES", "CANTNC", "MONTONC", "CANT.ANUL", "MONTO.ANUL"]
+    columnas_reporte = ["FECHA", "FALTANTE", "DATOS PLANI", "OBSERVACIONES", "CANTNC", "MONTONC", "CANT.ANUL", "MONTO.ANUL"]
     
     if df_filtrado.empty:
         df_reporte = pd.DataFrame(columns=columnas_reporte)
