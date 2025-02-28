@@ -8,28 +8,20 @@ import shutil
 def cargar_datos(uploaded_file):
     """Carga el archivo de Excel subido por el usuario."""
     if uploaded_file is not None:
-        df = pd.read_excel(uploaded_file, sheet_name="Hoja1")
-        df.rename(columns={"CANT ": "CANT"}, inplace=True)
+        df = pd.read_excel(uploaded_file)  # Cargamos el DataFrame
         df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce', dayfirst=True)
         return df
     return None
 
+
 # 📌 Función para generar reportes por cajero
 def generar_reporte_por_cajero(df, cajero, fecha_inicio, fecha_fin, carpeta_reportes, observacion_final):
     """Genera un reporte individual para un cajero en un rango de fechas con formato mejorado."""
-    # Renombrar las columnas en el DataFrame
-    renombrar_columnas = {
-        "DATOS_PLANILLA": "DATOS PLANI",
-        "CANT": "CANTNC",
-        "NC": "MONTONC",
-        "CANTIA_NUL": "CANT.ANUL",
-        "MONTO_ANUL": "MONTO.ANUL"
-    }
     
-    df = df.rename(columns=renombrar_columnas)
-    
-    df_filtrado = df[(df["CAJERO"] == cajero) & (df["FECHA"] >= fecha_inicio) & (df["FECHA"] <= fecha_fin)]
-    columnas_reporte = ["FECHA", "FALTANTE", "DATOS PLANI", "OBSERVACIONES", "CANTNC", "MONTONC", "CANT.ANUL", "MONTO.ANUL"]
+    # Se suma un día a la fecha_fin para incluir el último día completo
+    fecha_fin_incl = fecha_fin + pd.Timedelta(days=1)
+    df_filtrado = df[(df["CAJERO"] == cajero) & (df["FECHA"] >= fecha_inicio) & (df["FECHA"] < fecha_fin_incl)]
+    columnas_reporte = ["FECHA", "FALTANTE", "SOBRANTE", "CANT.TK", "DATOSPLANI", "OBSERVACIONES", "CANT.NC", "MONTO.NC", "CANTANUL", "MONTOANUL"]
     
     if df_filtrado.empty:
         df_reporte = pd.DataFrame(columns=columnas_reporte)
@@ -76,6 +68,8 @@ if df is not None and len(rango_fechas) == 2:
     st.dataframe(df.head())
     
     fecha_inicio, fecha_fin = pd.Timestamp(rango_fechas[0]), pd.Timestamp(rango_fechas[1])
+    # Se suma un día a la fecha_fin para incluir el último día en los filtros
+    fecha_fin_incl = fecha_fin + pd.Timedelta(days=1)
     
     # 📌 Filtrar por tienda o sucursal si existe la columna
     if "SUCU" in df.columns:
@@ -84,7 +78,104 @@ if df is not None and len(rango_fechas) == 2:
         if sucursal_seleccionada != "Todas":
             df = df[df["SUCU"] == sucursal_seleccionada]
     
-    # 📌 Selección de cajeros específicos
+    # 📌 Crear DataFrame filtrado por el rango de fechas (incluyendo el último día)
+    df_periodo = df[(df["FECHA"] >= fecha_inicio) & (df["FECHA"] < fecha_fin_incl)]
+    
+    # 📌 Top 10 Cajeros con más Faltantes en el periodo seleccionado (ya existente)
+    top10_faltantes = (
+        df_periodo.groupby("CAJERO")["FALTANTE"]
+        .sum()
+        .reset_index()
+        .sort_values(by="FALTANTE", ascending=False)
+        .head(10)
+    )
+    st.subheader("Top 10 Cajeros con más Faltantes en el periodo seleccionado")
+    st.dataframe(top10_faltantes)
+    
+    # 📌 Top 10 de PROM.TK (Tickeo)
+    top10_prom_tk = df_periodo.groupby("CAJERO")["PROM.TK"].mean().reset_index()
+    top10_prom_tk_max = top10_prom_tk.sort_values(by="PROM.TK", ascending=False).head(10)
+    top10_prom_tk_min = top10_prom_tk.sort_values(by="PROM.TK", ascending=True).head(10)
+    st.subheader("Top 10 Cajeros con mayor PROM.TK (Tickeo)")
+    st.dataframe(top10_prom_tk_max)
+    st.subheader("Top 10 Cajeros con menor PROM.TK (Tickeo)")
+    st.dataframe(top10_prom_tk_min)
+    
+    # 📌 Top 10 de PROM.COB (Cobro)
+    top10_prom_cob = df_periodo.groupby("CAJERO")["PROM.COB"].mean().reset_index()
+    top10_prom_cob_max = top10_prom_cob.sort_values(by="PROM.COB", ascending=False).head(10)
+    top10_prom_cob_min = top10_prom_cob.sort_values(by="PROM.COB", ascending=True).head(10)
+    st.subheader("Top 10 Cajeros con mayor PROM.COB (Cobro)")
+    st.dataframe(top10_prom_cob_max)
+    st.subheader("Top 10 Cajeros con menor PROM.COB (Cobro)")
+    st.dataframe(top10_prom_cob_min)
+    
+    # 📌 Top 10 de promedio de PROM.ITEMS (Items)
+    top10_cant_item = df_periodo.groupby("CAJERO")["PROM.ITEMS"].mean().reset_index()
+    top10_cant_item_max = top10_cant_item.sort_values(by="PROM.ITEMS", ascending=False).head(10)
+    top10_cant_item_min = top10_cant_item.sort_values(by="PROM.ITEMS", ascending=True).head(10)
+    st.subheader("Top 10 Cajeros con mayor promedio de PROM.ITEMS")
+    st.dataframe(top10_cant_item_max)
+    st.subheader("Top 10 Cajeros con menor promedio de PROM.ITEMS")
+    st.dataframe(top10_cant_item_min)
+    
+    # ──────────────────────────────────────────────────────────────
+    # 📌 Nuevos cálculos solicitados:
+    
+    # 1) Promedio de Anulados por ticket = sum(CANTANUL) / sum(CANT.TK)
+    agg_anulados = df_periodo.groupby("CAJERO").agg({"CANT.TK": "sum", "CANTANUL": "sum"}).reset_index()
+    agg_anulados["Promedio_Anulados_x_Ticket"] = agg_anulados.apply(
+        lambda row: row["CANT.TK"] / row["CANTANUL"] if row["CANTANUL"] != 0 else 0, axis=1
+    )
+    top10_prom_anulados_max = agg_anulados.sort_values(by="Promedio_Anulados_x_Ticket", ascending=False).head(10)
+    agg_anulados_nonzero = agg_anulados[agg_anulados["Promedio_Anulados_x_Ticket"] != 0]
+    top10_prom_anulados_min = agg_anulados_nonzero.sort_values(by="Promedio_Anulados_x_Ticket", ascending=True).head(10)
+    st.subheader("Top 10 Cajeros con mayor Promedio de Anulados por Ticket")
+    st.dataframe(top10_prom_anulados_max)
+    st.subheader("Top 10 Cajeros con menor Promedio de Anulados por Ticket (excluyendo 0)")
+    st.dataframe(top10_prom_anulados_min)
+    
+    # 2) Promedio de montos de anulados por ticket = sum(MONTOANUL) / sum(CANT.TK)
+    agg_monto_anulados = df_periodo.groupby("CAJERO").agg({"MONTOANUL": "sum", "CANT.TK": "sum"}).reset_index()
+    agg_monto_anulados["Promedio_Monto_Anulados_x_Ticket"] = agg_monto_anulados.apply(
+        lambda row: row["MONTOANUL"] / row["CANT.TK"] if row["CANT.TK"] != 0 else 0, axis=1
+    )
+    top10_prom_monto_anulados_max = agg_monto_anulados.sort_values(by="Promedio_Monto_Anulados_x_Ticket", ascending=False).head(10)
+    agg_monto_anulados_nonzero = agg_monto_anulados[agg_monto_anulados["Promedio_Monto_Anulados_x_Ticket"] != 0]
+    top10_prom_monto_anulados_min = agg_monto_anulados_nonzero.sort_values(by="Promedio_Monto_Anulados_x_Ticket", ascending=True).head(10)
+    st.subheader("Top 10 Cajeros con mayor Promedio de Montos de Anulados por Ticket")
+    st.dataframe(top10_prom_monto_anulados_max)
+    st.subheader("Top 10 Cajeros con menor Promedio de Montos de Anulados por Ticket (excluyendo 0)")
+    st.dataframe(top10_prom_monto_anulados_min)
+    
+    # 3) Promedio de notas de crédito por ticket = sum(CANT.NC) / sum(CANT.TK)
+    agg_nc = df_periodo.groupby("CAJERO").agg({"CANT.TK": "sum", "CANT.NC": "sum"}).reset_index()
+    agg_nc["Promedio_Notas_Credito_x_Ticket"] = agg_nc.apply(
+        lambda row: row["CANT.TK"] / row["CANT.NC"] if row["CANT.NC"] != 0 else 0, axis=1
+    )
+    top10_prom_nc_max = agg_nc.sort_values(by="Promedio_Notas_Credito_x_Ticket", ascending=False).head(10)
+    agg_nc_nonzero = agg_nc[agg_nc["Promedio_Notas_Credito_x_Ticket"] != 0]
+    top10_prom_nc_min = agg_nc_nonzero.sort_values(by="Promedio_Notas_Credito_x_Ticket", ascending=True).head(10)
+    st.subheader("Top 10 Cajeros con mayor Promedio de Notas de Crédito por Ticket")
+    st.dataframe(top10_prom_nc_max)
+    st.subheader("Top 10 Cajeros con menor Promedio de Notas de Crédito por Ticket (excluyendo 0)")
+    st.dataframe(top10_prom_nc_min)
+    
+    # 4) Promedio de montos de nota de crédito por ticket = sum(MONTO.NC) / sum(CANT.TK)
+    agg_monto_nc = df_periodo.groupby("CAJERO").agg({"MONTO.NC": "sum", "CANT.TK": "sum"}).reset_index()
+    agg_monto_nc["Promedio_Monto_NC_x_Ticket"] = agg_monto_nc.apply(
+        lambda row: row["MONTO.NC"] / row["CANT.TK"] if row["CANT.TK"] != 0 else 0, axis=1
+    )
+    top10_prom_monto_nc_max = agg_monto_nc.sort_values(by="Promedio_Monto_NC_x_Ticket", ascending=False).head(10)
+    agg_monto_nc_nonzero = agg_monto_nc[agg_monto_nc["Promedio_Monto_NC_x_Ticket"] != 0]
+    top10_prom_monto_nc_min = agg_monto_nc_nonzero.sort_values(by="Promedio_Monto_NC_x_Ticket", ascending=True).head(10)
+    st.subheader("Top 10 Cajeros con mayor Promedio de Montos de Nota de Crédito por Ticket")
+    st.dataframe(top10_prom_monto_nc_max)
+    st.subheader("Top 10 Cajeros con menor Promedio de Montos de Nota de Crédito por Ticket (excluyendo 0)")
+    st.dataframe(top10_prom_monto_nc_min)
+    
+    # ──────────────────────────────────────────────────────────────
+    # 📌 Selección de cajeros específicos para generar reportes
     cajeros_disponibles = df["CAJERO"].dropna().unique().tolist()
     cajeros_seleccionados = st.multiselect("Selecciona los cajeros para generar reportes", cajeros_disponibles, default=cajeros_disponibles)
     
